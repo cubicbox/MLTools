@@ -25,6 +25,20 @@
 
 ### 依存関係
 
+**uvを使用する場合（推奨）：**
+
+```bash
+# プロジェクトディレクトリで
+uv init  # pyproject.toml を作成（初回のみ）
+uv add numpy scipy matplotlib scikit-learn
+```
+
+または、既存環境への直接インストール：
+```bash
+uv pip install numpy scipy matplotlib scikit-learn
+```
+
+**従来のpipの場合：**
 ```bash
 pip install numpy scipy matplotlib scikit-learn
 ```
