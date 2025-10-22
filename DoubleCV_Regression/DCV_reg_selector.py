@@ -34,7 +34,7 @@ except ImportError:
 warnings.filterwarnings('ignore')
 
 
-class DoubleCV_RegressionSelector:
+class DCV_reg_selector:
     """
     ダブルクロスバリデーションによる回帰モデル選択器
 
@@ -248,7 +248,7 @@ class DoubleCV_RegressionSelector:
         }
 
     def fit(self, X: np.ndarray, y: np.ndarray,
-            model_subset: Optional[List[str]] = None) -> 'DoubleCV_RegressionSelector':
+            model_subset: Optional[List[str]] = None) -> 'DCV_reg_selector':
         """
         ダブルクロスバリデーションによるモデル選択・評価を実行
 
@@ -263,7 +263,7 @@ class DoubleCV_RegressionSelector:
 
         Returns:
         --------
-        self : DoubleCV_RegressionSelector
+        self : DCV_reg_selector
         """
 
         if self.verbose:
@@ -442,17 +442,37 @@ class DoubleCV_RegressionSelector:
     def _train_best_model(self, X: np.ndarray, y: np.ndarray):
         """最良モデルを全データで再学習"""
 
-        # 最良パラメータの決定（最頻値または平均）
+        # 最良パラメータの決定
         best_params_list = self.results_[self.best_model_name_]['best_params_per_fold']
 
         if best_params_list and best_params_list[0]:  # パラメータがある場合
-            # 各パラメータの最頻値を取得
-            best_params = {}
-            for param_name in best_params_list[0].keys():
-                param_values = [params[param_name] for params in best_params_list]
-                # 最頻値を取得
-                unique_values, counts = np.unique(param_values, return_counts=True)
-                best_params[param_name] = unique_values[np.argmax(counts)]
+            # 最も良いfoldのパラメータを使用
+            fold_scores = []
+            for i in range(len(best_params_list)):
+                fold_scores.append(self.results_[self.best_model_name_]['raw_scores']['rmse'][i])
+            best_fold_idx = np.argmin(fold_scores)
+
+            # そのfoldのベストパラメータからモデル用パラメータを再構築
+            model_config = self.models[self.best_model_name_]
+            if model_config['param_suggest_func'] is not None:
+                # ダミーのTrialクラスを作成してパラメータを再生成
+                class DummyTrial:
+                    def __init__(self, params):
+                        self.params = params
+
+                    def suggest_float(self, name, low, high, log=False):
+                        return self.params.get(name, (low + high) / 2)
+
+                    def suggest_int(self, name, low, high):
+                        return self.params.get(name, int((low + high) / 2))
+
+                    def suggest_categorical(self, name, choices):
+                        return self.params.get(name, choices[0])
+
+                dummy_trial = DummyTrial(best_params_list[best_fold_idx])
+                best_params = model_config['param_suggest_func'](dummy_trial)
+            else:
+                best_params = {}
         else:
             best_params = {}
 
@@ -739,7 +759,7 @@ def demo_regression_selection():
     print(f"生成データ: X={X.shape}, y={y.shape}")
 
     # モデル選択器の作成と実行
-    selector = DoubleCV_RegressionSelector(
+    selector = DCV_reg_selector(
         outer_cv=3,  # デモのため少なく設定
         inner_cv=2,
         n_trials=20,  # デモのため少なく設定
